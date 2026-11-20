@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { io } from "socket.io-client";
 
 const BACKEND_URL =
@@ -28,7 +28,6 @@ export function useLeads() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
-  const hasLoadedOnce = useRef(false);
 
   const fetchLeads = useCallback(async () => {
     try {
@@ -42,10 +41,7 @@ export function useLeads() {
     } catch (err) {
       setError(err.message || "Failed to load leads");
     } finally {
-      if (!hasLoadedOnce.current) {
-        hasLoadedOnce.current = true;
-        setLoading(false);
-      }
+      setLoading(false);
     }
   }, []);
 

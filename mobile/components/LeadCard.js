@@ -16,14 +16,12 @@ function formatTime(isoString) {
 }
 
 function formatFieldLabel(key) {
-  return key
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+  return key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 export default function LeadCard({ lead }) {
   const extraFields = Object.entries(lead).filter(
-    ([key, value]) => !RESERVED_KEYS.has(key) && value !== "" && value != null
+    ([key, value]) => !RESERVED_KEYS.has(key) && value !== "" && value != null,
   );
 
   return (

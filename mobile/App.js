@@ -74,8 +74,8 @@ function LeadsScreen() {
             <View style={styles.emptyState}>
               <Text style={styles.emptyTitle}>Waiting for leads...</Text>
               <Text style={styles.emptySubtitle}>
-                Submit a test lead in Meta's Lead Ads Testing Tool to see
-                it appear here in real time.
+                Submit a test lead in Meta's Lead Ads Testing Tool to see it
+                appear here in real time.
               </Text>
             </View>
           }

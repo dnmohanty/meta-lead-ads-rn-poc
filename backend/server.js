@@ -20,6 +20,8 @@ for (const key of REQUIRED_ENV_VARS) {
 
 const PORT = process.env.PORT || 3000;
 const GRAPH_API_VERSION = "v27.0";
+const MAX_FETCH_RETRIES = 3;
+const RETRY_DELAY_MS = 1500;
 const META_VERIFY_TOKEN = process.env.META_VERIFY_TOKEN;
 const META_PAGE_ACCESS_TOKEN = process.env.META_PAGE_ACCESS_TOKEN;
 const META_APP_SECRET = process.env.META_APP_SECRET;
@@ -43,6 +45,10 @@ app.use(
 
 const leads = [];
 const processedLeadIds = new Set();
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function verifySignature(req) {
   const signature = req.headers["x-hub-signature-256"];
@@ -92,30 +98,43 @@ async function processLead(leadgenId) {
 
   processedLeadIds.add(leadgenId);
 
-  try {
-    const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${leadgenId}`;
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${META_PAGE_ACCESS_TOKEN}`,
-      },
-    });
+  for (let attempt = 1; attempt <= MAX_FETCH_RETRIES; attempt++) {
+    try {
+      const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${leadgenId}`;
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${META_PAGE_ACCESS_TOKEN}`,
+        },
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (!response.ok || data.error) {
-      console.error("Meta API Error:", data);
-      processedLeadIds.delete(leadgenId);
+      if (!response.ok || data.error) {
+        throw new Error(
+          data?.error?.message || `Graph API HTTP ${response.status}`,
+        );
+      }
+
+      const lead = normalizeLead(data);
+      leads.unshift(lead);
+      console.log(`Stored and broadcasting lead: ${lead.id}`);
+      io.emit("new_lead", lead);
       return;
-    }
+    } catch (error) {
+      console.error(
+        `Attempt ${attempt}/${MAX_FETCH_RETRIES} failed for lead ${leadgenId}:`,
+        error.message || error,
+      );
 
-    const lead = normalizeLead(data);
-    leads.unshift(lead);
-    console.log(`Stored and broadcasting lead: ${lead.id}`);
-    io.emit("new_lead", lead);
-  } catch (error) {
-    console.error("Failed to fetch lead:", error);
-    processedLeadIds.delete(leadgenId);
+      if (attempt < MAX_FETCH_RETRIES) {
+        await delay(RETRY_DELAY_MS * attempt);
+      }
+    }
   }
+
+  console.error(
+    `Giving up on lead ${leadgenId} after ${MAX_FETCH_RETRIES} attempts`,
+  );
 }
 
 io.on("connection", (socket) => {
