@@ -1,94 +1,24 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React from "react";
 import {
   StyleSheet,
   Text,
   View,
   FlatList,
-  SafeAreaView,
   StatusBar,
-  Platform,
   RefreshControl,
+  ActivityIndicator,
+  TouchableOpacity,
 } from "react-native";
-import { io } from "socket.io-client";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { useLeads } from "./hooks/useLeads";
+import LeadCard from "./components/LeadCard";
 
-const BACKEND_URL = "https://meta-lead-ads-rn-poc.onrender.com";
-
-export default function App() {
-  const [leads, setLeads] = useState([]);
-  const [connected, setConnected] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const fetchLeads = useCallback(async () => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/leads`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setLeads(data);
-    } catch (err) {
-      console.error("Failed to fetch leads:", err);
-    }
-  }, []);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await fetchLeads();
-    setRefreshing(false);
-  }, [fetchLeads]);
-
-  useEffect(() => {
-    fetchLeads();
-
-    const socket = io(BACKEND_URL, {
-      transports: ["websocket", "polling"],
-    });
-
-    socket.on("connect", () => {
-      setConnected(true);
-    });
-
-    socket.on("disconnect", () => {
-      setConnected(false);
-    });
-
-    socket.on("new_lead", (lead) => {
-      setLeads((prev) => {
-        if (prev.some((item) => item.id === lead.id)) {
-          return prev;
-        }
-        return [lead, ...prev];
-      });
-    });
-
-    return () => {
-      socket.disconnect();
-    };
-  }, [fetchLeads]);
-
-  const formatTime = (isoString) => {
-    if (!isoString) return "";
-    const date = new Date(isoString);
-    return isNaN(date.getTime()) ? isoString : date.toLocaleString();
-  };
-
-  const renderLead = ({ item }) => (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.name}>{item.full_name || "Unnamed Lead"}</Text>
-        <Text style={styles.time}>{formatTime(item.created_time)}</Text>
-      </View>
-
-      {item.email ? (
-        <Text style={styles.detail}>Email: {item.email}</Text>
-      ) : null}
-      {item.phone_number ? (
-        <Text style={styles.detail}>Phone: {item.phone_number}</Text>
-      ) : null}
-      <Text style={styles.leadId}>ID: {item.id}</Text>
-    </View>
-  );
+function LeadsScreen() {
+  const { leads, connected, loading, refreshing, error, onRefresh } =
+    useLeads();
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.header}>
@@ -117,25 +47,49 @@ export default function App() {
         </View>
       </View>
 
-      <FlatList
-        data={leads}
-        keyExtractor={(item) => String(item.id)}
-        renderItem={renderLead}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>Waiting for leads...</Text>
-            <Text style={styles.emptySubtitle}>
-              Submit a test lead in Meta's Lead Ads Testing Tool to see it
-              appear here in real time.
-            </Text>
-          </View>
-        }
-      />
+      {error ? (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity onPress={onRefresh} style={styles.retryButton}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      {loading && leads.length === 0 ? (
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color="#2563EB" />
+          <Text style={styles.loadingText}>Loading leads...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={leads}
+          keyExtractor={(item) => String(item.id)}
+          renderItem={({ item }) => <LeadCard lead={item} />}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyTitle}>Waiting for leads...</Text>
+              <Text style={styles.emptySubtitle}>
+                Submit a test lead in Meta's Lead Ads Testing Tool to see
+                it appear here in real time.
+              </Text>
+            </View>
+          }
+        />
+      )}
     </SafeAreaView>
+  );
+}
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <LeadsScreen />
+    </SafeAreaProvider>
   );
 }
 
@@ -143,7 +97,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F5F7FA",
-    paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
   },
   header: {
     flexDirection: "row",
@@ -195,47 +148,36 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#1F2937",
   },
+  errorBanner: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#FEE2E2",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#FECACA",
+  },
+  errorText: {
+    color: "#991B1B",
+    fontSize: 13,
+    flex: 1,
+    marginRight: 12,
+  },
+  retryButton: {
+    backgroundColor: "#DC2626",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  retryText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "600",
+  },
   listContent: {
     padding: 16,
     flexGrow: 1,
-  },
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 8,
-  },
-  name: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#111827",
-    flex: 1,
-    marginRight: 8,
-  },
-  time: {
-    fontSize: 11,
-    color: "#6B7280",
-  },
-  detail: {
-    fontSize: 14,
-    color: "#374151",
-    marginBottom: 4,
-  },
-  leadId: {
-    fontSize: 12,
-    color: "#9CA3AF",
-    marginTop: 6,
   },
   emptyState: {
     flex: 1,
@@ -243,6 +185,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 32,
     paddingTop: 80,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#6B7280",
   },
   emptyTitle: {
     fontSize: 18,

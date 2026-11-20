@@ -38,7 +38,7 @@ app.use(
     verify: (req, res, buf) => {
       req.rawBody = buf;
     },
-  })
+  }),
 );
 
 const leads = [];
@@ -110,7 +110,7 @@ async function processLead(leadgenId) {
 
     const lead = normalizeLead(data);
     leads.unshift(lead);
-    console.log("Stored and broadcasting lead:", lead);
+    console.log(`Stored and broadcasting lead: ${lead.id}`);
     io.emit("new_lead", lead);
   } catch (error) {
     console.error("Failed to fetch lead:", error);
@@ -150,6 +150,10 @@ app.post("/webhook", (req, res) => {
   if (!verifySignature(req)) {
     console.warn("Invalid webhook signature");
     return res.sendStatus(401);
+  }
+
+  if (req.body.object !== "page") {
+    return res.sendStatus(404);
   }
 
   res.sendStatus(200);
