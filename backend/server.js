@@ -98,7 +98,12 @@ async function processLead(leadgenId) {
 
   processedLeadIds.add(leadgenId);
 
+  let attemptsMade = 0;
+
   for (let attempt = 1; attempt <= MAX_FETCH_RETRIES; attempt++) {
+    attemptsMade = attempt;
+    let shouldRetry = true;
+
     try {
       const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${leadgenId}`;
       const response = await fetch(url, {
@@ -110,6 +115,13 @@ async function processLead(leadgenId) {
       const data = await response.json();
 
       if (!response.ok || data.error) {
+        if (
+          response.status >= 400 &&
+          response.status < 500 &&
+          response.status !== 429
+        ) {
+          shouldRetry = false;
+        }
         throw new Error(
           data?.error?.message || `Graph API HTTP ${response.status}`,
         );
@@ -126,14 +138,19 @@ async function processLead(leadgenId) {
         error.message || error,
       );
 
+      if (!shouldRetry) {
+        break;
+      }
+
       if (attempt < MAX_FETCH_RETRIES) {
         await delay(RETRY_DELAY_MS * attempt);
       }
     }
   }
 
+  processedLeadIds.delete(leadgenId);
   console.error(
-    `Giving up on lead ${leadgenId} after ${MAX_FETCH_RETRIES} attempts`,
+    `Giving up on lead ${leadgenId} after ${attemptsMade} attempt(s)`,
   );
 }
 
