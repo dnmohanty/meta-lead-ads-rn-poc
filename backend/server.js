@@ -38,11 +38,12 @@ app.use(
     verify: (req, res, buf) => {
       req.rawBody = buf;
     },
-  }),
+  })
 );
 
 const leads = [];
 const processedLeadIds = new Set();
+
 function verifySignature(req) {
   const signature = req.headers["x-hub-signature-256"];
   if (!signature || !req.rawBody) {
